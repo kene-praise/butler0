@@ -2,10 +2,12 @@ import { useState, useCallback } from "react";
 import { streamChat, type ChatMessage } from "@/lib/stream-chat";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { ExtractionResult } from "@/components/chat/ExtractedItems";
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [extractedItems, setExtractedItems] = useState<ExtractionResult | null>(null);
 
   const loadMessages = useCallback(async () => {
     const { data } = await supabase
@@ -25,6 +27,30 @@ export function useChat() {
     }
   }, []);
 
+  const extractItems = useCallback(async (msgs: ChatMessage[]) => {
+    try {
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ messages: msgs.slice(-10) }),
+        }
+      );
+      if (!resp.ok) return;
+      const data: ExtractionResult = await resp.json();
+      const totalItems = (data.goals?.length || 0) + (data.tasks?.length || 0) + (data.milestones?.length || 0);
+      if (totalItems > 0) {
+        setExtractedItems(data);
+      }
+    } catch (e) {
+      console.error("Extraction failed:", e);
+    }
+  }, []);
+
   const sendMessage = useCallback(
     async (input: string) => {
       if (!input.trim() || isLoading) return;
@@ -33,7 +59,6 @@ export function useChat() {
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
 
-      // Save user message
       await supabase.from("chat_messages").insert({
         role: "user",
         content: userMsg.content,
@@ -59,13 +84,15 @@ export function useChat() {
           onDelta: upsertAssistant,
           onDone: async () => {
             setIsLoading(false);
-            // Save assistant message
             if (assistantSoFar) {
               await supabase.from("chat_messages").insert({
                 role: "assistant",
                 content: assistantSoFar,
               });
             }
+            // Trigger extraction in background
+            const allMsgs = [...messages, userMsg, { role: "assistant" as const, content: assistantSoFar }];
+            extractItems(allMsgs);
           },
           onError: (error) => {
             setIsLoading(false);
@@ -78,8 +105,10 @@ export function useChat() {
         toast.error("Something went wrong. Please try again.");
       }
     },
-    [messages, isLoading]
+    [messages, isLoading, extractItems]
   );
 
-  return { messages, isLoading, sendMessage, loadMessages };
+  const dismissExtracted = useCallback(() => setExtractedItems(null), []);
+
+  return { messages, isLoading, sendMessage, loadMessages, extractedItems, dismissExtracted };
 }

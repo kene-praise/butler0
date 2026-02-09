@@ -1,0 +1,128 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const SYSTEM_PROMPT = `You are a task extraction engine. Analyze the conversation and extract any goals, milestones, and tasks mentioned. 
+
+Return structured data using the extract_items tool. Only extract items that the user explicitly mentions wanting to do. Don't invent items.
+
+Guidelines:
+- Goals are high-level objectives (e.g. "Launch my SaaS", "Learn Spanish")
+- Milestones are checkpoints within a goal (e.g. "Complete MVP", "Pass B1 exam")
+- Tasks are specific actionable items (e.g. "Set up landing page", "Practice vocabulary 30 min daily")
+- If a task clearly belongs to a goal mentioned in the same conversation, set goal_title to match
+- Priority should be "low", "medium", "high", or "urgent" based on context
+- Dates should be ISO format (YYYY-MM-DD) when mentioned`;
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { messages } = await req.json();
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...messages,
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "extract_items",
+              description: "Extract goals, milestones, and tasks from the conversation",
+              parameters: {
+                type: "object",
+                properties: {
+                  goals: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        description: { type: "string" },
+                        deadline: { type: "string" },
+                      },
+                      required: ["title"],
+                    },
+                  },
+                  milestones: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        goal_title: { type: "string" },
+                        due_date: { type: "string" },
+                      },
+                      required: ["title"],
+                    },
+                  },
+                  tasks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                        due_date: { type: "string" },
+                        goal_title: { type: "string" },
+                      },
+                      required: ["title"],
+                    },
+                  },
+                },
+                required: ["goals", "milestones", "tasks"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "extract_items" } },
+      }),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.error("AI gateway error:", response.status, t);
+      return new Response(JSON.stringify({ error: "AI extraction failed" }), {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const data = await response.json();
+    console.log("Extraction response:", JSON.stringify(data));
+    
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) {
+      return new Response(JSON.stringify({ goals: [], milestones: [], tasks: [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const extracted = JSON.parse(toolCall.function.arguments);
+    return new Response(JSON.stringify(extracted), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("extract error:", e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
