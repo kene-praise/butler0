@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import {
   MessageSquare,
   Target,
@@ -15,28 +17,38 @@ const navItems = [
   { to: "/goals", icon: Target, label: "Goals" },
   { to: "/tasks", icon: CheckSquare, label: "Tasks" },
   { to: "/content", icon: Bookmark, label: "Content Queue" },
-  { to: "/notifications", icon: Bell, label: "Notifications" },
+  { to: "/notifications", icon: Bell, label: "Notifications", badge: true },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      const { count } = await supabase
+        .from("agent_events")
+        .select("*", { count: "exact", head: true })
+        .eq("read", false);
+      setUnreadCount(count || 0);
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-sidebar-border bg-sidebar">
-      {/* Logo */}
       <div className="flex items-center gap-2 px-5 py-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
           <Zap className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="text-base font-semibold text-sidebar-foreground">
-          AgentOS
-        </span>
+        <span className="text-base font-semibold text-sidebar-foreground">AgentOS</span>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 space-y-0.5 px-3 py-2">
-        {navItems.map(({ to, icon: Icon, label }) => {
+        {navItems.map(({ to, icon: Icon, label, badge }) => {
           const isActive = location.pathname === to;
           return (
             <NavLink
@@ -50,17 +62,19 @@ export function AppSidebar() {
               )}
             >
               <Icon className="h-4 w-4" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {badge && unreadCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </NavLink>
           );
         })}
       </nav>
 
-      {/* Footer */}
       <div className="border-t border-sidebar-border px-5 py-4">
-        <p className="text-xs text-muted-foreground">
-          Your AI execution assistant
-        </p>
+        <p className="text-xs text-muted-foreground">Your AI execution assistant</p>
       </div>
     </aside>
   );

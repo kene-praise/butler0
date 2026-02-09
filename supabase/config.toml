@@ -1,1 +1,13 @@
 project_id = "kmxmazyahhbhfkmgejxu"
+
+[functions.chat]
+verify_jwt = false
+
+[functions.extract]
+verify_jwt = false
+
+[functions.summarize-bookmark]
+verify_jwt = false
+
+[functions.agent-check]
+verify_jwt = false

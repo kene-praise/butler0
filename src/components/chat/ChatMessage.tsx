@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -24,7 +25,13 @@ export function ChatMessage({ role, content }: ChatMessageProps) {
             : "bg-secondary text-secondary-foreground"
         )}
       >
-        <p className="whitespace-pre-wrap">{content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{content}</p>
+        ) : (
+          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
+        )}
       </div>
       {isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
