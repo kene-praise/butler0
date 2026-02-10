@@ -31,47 +31,72 @@ serve(async (req) => {
       });
     }
 
-    // Fetch the URL content using Firecrawl (handles JS-rendered pages like Twitter/X)
+    // Fetch the URL content
     let pageText = "";
     try {
-      const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-      if (FIRECRAWL_API_KEY) {
-        const scrapeResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            url: bookmark.url,
-            formats: ["markdown"],
-            onlyMainContent: true,
-            waitFor: 3000,
-          }),
-        });
-        if (scrapeResp.ok) {
-          const scrapeData = await scrapeResp.json();
-          pageText = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 5000);
-          console.log("Firecrawl scraped successfully, length:", pageText.length);
-        } else {
-          console.log("Firecrawl error:", scrapeResp.status, await scrapeResp.text());
-        }
-      }
+      const urlObj = new URL(bookmark.url);
+      const isTwitter = urlObj.hostname === "x.com" || urlObj.hostname === "twitter.com" || urlObj.hostname === "www.x.com" || urlObj.hostname === "www.twitter.com";
 
-      // Fallback to basic fetch if Firecrawl unavailable or failed
-      if (!pageText) {
-        const pageResp = await fetch(bookmark.url, {
-          headers: { "User-Agent": "Mozilla/5.0 AgentOS/1.0" },
-        });
-        if (pageResp.ok) {
-          const html = await pageResp.text();
-          pageText = html
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      if (isTwitter) {
+        // Use Twitter's oEmbed API (free, no auth needed) to get tweet text
+        const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(bookmark.url)}&omit_script=true`;
+        const oembedResp = await fetch(oembedUrl);
+        if (oembedResp.ok) {
+          const oembed = await oembedResp.json();
+          // Strip HTML from the returned html field to get plain text
+          pageText = (oembed.html || "")
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
-            .trim()
-            .slice(0, 5000);
+            .trim();
+          if (oembed.author_name) {
+            pageText = `Tweet by ${oembed.author_name}: ${pageText}`;
+          }
+          console.log("Twitter oEmbed success, length:", pageText.length);
+        } else {
+          console.log("Twitter oEmbed error:", oembedResp.status);
+          pageText = `Twitter/X post at ${bookmark.url}`;
+        }
+      } else {
+        // Use Firecrawl for non-Twitter URLs
+        const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+        if (FIRECRAWL_API_KEY) {
+          const scrapeResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: bookmark.url,
+              formats: ["markdown"],
+              onlyMainContent: true,
+              waitFor: 3000,
+            }),
+          });
+          if (scrapeResp.ok) {
+            const scrapeData = await scrapeResp.json();
+            pageText = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 5000);
+            console.log("Firecrawl scraped successfully, length:", pageText.length);
+          } else {
+            console.log("Firecrawl error:", scrapeResp.status, await scrapeResp.text());
+          }
+        }
+
+        // Fallback to basic fetch
+        if (!pageText) {
+          const pageResp = await fetch(bookmark.url, {
+            headers: { "User-Agent": "Mozilla/5.0 AgentOS/1.0" },
+          });
+          if (pageResp.ok) {
+            const html = await pageResp.text();
+            pageText = html
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 5000);
+          }
         }
       }
     } catch (e) {
