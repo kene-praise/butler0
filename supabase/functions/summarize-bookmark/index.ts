@@ -31,22 +31,48 @@ serve(async (req) => {
       });
     }
 
-    // Fetch the URL content (basic text extraction)
+    // Fetch the URL content using Firecrawl (handles JS-rendered pages like Twitter/X)
     let pageText = "";
     try {
-      const pageResp = await fetch(bookmark.url, {
-        headers: { "User-Agent": "Mozilla/5.0 AgentOS/1.0" },
-      });
-      if (pageResp.ok) {
-        const html = await pageResp.text();
-        // Strip HTML tags for a rough text extraction
-        pageText = html
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 5000); // Limit context
+      const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+      if (FIRECRAWL_API_KEY) {
+        const scrapeResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: bookmark.url,
+            formats: ["markdown"],
+            onlyMainContent: true,
+            waitFor: 3000,
+          }),
+        });
+        if (scrapeResp.ok) {
+          const scrapeData = await scrapeResp.json();
+          pageText = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 5000);
+          console.log("Firecrawl scraped successfully, length:", pageText.length);
+        } else {
+          console.log("Firecrawl error:", scrapeResp.status, await scrapeResp.text());
+        }
+      }
+
+      // Fallback to basic fetch if Firecrawl unavailable or failed
+      if (!pageText) {
+        const pageResp = await fetch(bookmark.url, {
+          headers: { "User-Agent": "Mozilla/5.0 AgentOS/1.0" },
+        });
+        if (pageResp.ok) {
+          const html = await pageResp.text();
+          pageText = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 5000);
+        }
       }
     } catch (e) {
       console.log("Failed to fetch URL content:", e);
