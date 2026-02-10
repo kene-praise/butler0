@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,8 +15,57 @@ When a user shares goals, ideas, or plans:
 3. Suggest deadlines and priorities when appropriate
 4. Be encouraging but practical
 
+You have memory of the user's current goals, tasks, and recent conversations. Reference them naturally when relevant — remind the user of related goals, suggest connections between tasks, and proactively check in on progress.
+
 Keep responses concise and action-oriented. Use bullet points for tasks and steps.
 Don't be overly verbose — respect the user's time.`;
+
+async function buildMemoryContext(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const parts: string[] = [];
+
+  // Active goals
+  const { data: goals } = await supabase
+    .from("goals")
+    .select("title, status, deadline, description")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (goals?.length) {
+    parts.push("## Active Goals\n" + goals.map((g) =>
+      `- ${g.title}${g.deadline ? ` (deadline: ${new Date(g.deadline).toLocaleDateString()})` : ""}${g.description ? `: ${g.description}` : ""}`
+    ).join("\n"));
+  }
+
+  // Pending tasks
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("title, status, priority, due_date")
+    .in("status", ["todo", "in_progress"])
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .limit(15);
+
+  if (tasks?.length) {
+    parts.push("## Pending Tasks\n" + tasks.map((t) =>
+      `- [${t.priority}] ${t.title} (${t.status})${t.due_date ? ` — due ${new Date(t.due_date).toLocaleDateString()}` : ""}`
+    ).join("\n"));
+  }
+
+  // Recent agent nudges (unread)
+  const { data: nudges } = await supabase
+    .from("agent_events")
+    .select("message, event_type")
+    .eq("read", false)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (nudges?.length) {
+    parts.push("## Unread Nudges\n" + nudges.map((n) => `- ${n.message}`).join("\n"));
+  }
+
+  if (parts.length === 0) return "";
+  return "\n\n--- USER CONTEXT (from memory) ---\n" + parts.join("\n\n");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -26,6 +76,13 @@ serve(async (req) => {
     const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // Build memory context from DB
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const memoryContext = await buildMemoryContext(supabase);
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -38,7 +95,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: SYSTEM_PROMPT + memoryContext },
             ...messages,
           ],
           stream: true,
