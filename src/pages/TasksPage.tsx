@@ -161,10 +161,10 @@ export default function TasksPage() {
                 </div>
                 <Input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} />
                 {goals.length > 0 && (
-                  <Select value={form.goal_id} onValueChange={(v) => setForm((f) => ({ ...f, goal_id: v }))}>
+                  <Select value={form.goal_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, goal_id: v === "none" ? "" : v }))}>
                     <SelectTrigger><SelectValue placeholder="Link to goal (optional)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No goal</SelectItem>
+                      <SelectItem value="none">No goal</SelectItem>
                       {goals.map((g) => (
                         <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>
                       ))}
