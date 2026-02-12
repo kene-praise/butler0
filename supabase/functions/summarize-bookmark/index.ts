@@ -7,7 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// UUID v4 regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidPublicUrl(urlString: string): boolean {
@@ -42,6 +41,30 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // Authenticate user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json();
     const bookmark_id = body?.bookmark_id;
 
@@ -52,10 +75,7 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
+    // RLS ensures user can only access their own bookmarks
     const { data: bookmark, error: fetchErr } = await supabase
       .from("bookmarks")
       .select("*")
@@ -69,7 +89,6 @@ serve(async (req) => {
       });
     }
 
-    // Validate the bookmark URL before fetching
     if (!isValidPublicUrl(bookmark.url)) {
       return new Response(JSON.stringify({ error: "Invalid or unsafe URL" }), {
         status: 400,
@@ -77,7 +96,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch the URL content
     let pageText = "";
     try {
       const urlObj = new URL(bookmark.url);
@@ -199,6 +217,7 @@ serve(async (req) => {
 
     const result = JSON.parse(toolCall.function.arguments);
 
+    // RLS ensures user can only update their own bookmarks
     await supabase.from("bookmarks").update({
       title: result.title,
       content_summary: result.summary,

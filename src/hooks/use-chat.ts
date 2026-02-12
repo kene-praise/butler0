@@ -29,13 +29,15 @@ export function useChat() {
 
   const extractItems = useCallback(async (msgs: ChatMessage[]) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ messages: msgs.slice(-10) }),
         }

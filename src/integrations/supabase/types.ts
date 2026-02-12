@@ -23,6 +23,7 @@ export type Database = {
           message: string
           read: boolean
           scheduled_time: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -32,6 +33,7 @@ export type Database = {
           message: string
           read?: boolean
           scheduled_time?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -41,6 +43,7 @@ export type Database = {
           message?: string
           read?: boolean
           scheduled_time?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -54,6 +57,7 @@ export type Database = {
           title: string | null
           updated_at: string
           url: string
+          user_id: string | null
         }
         Insert: {
           category?: string | null
@@ -64,6 +68,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           url: string
+          user_id?: string | null
         }
         Update: {
           category?: string | null
@@ -74,6 +79,7 @@ export type Database = {
           title?: string | null
           updated_at?: string
           url?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -84,6 +90,7 @@ export type Database = {
           extracted_items: Json | null
           id: string
           role: string
+          user_id: string | null
         }
         Insert: {
           content: string
@@ -91,6 +98,7 @@ export type Database = {
           extracted_items?: Json | null
           id?: string
           role: string
+          user_id?: string | null
         }
         Update: {
           content?: string
@@ -98,6 +106,7 @@ export type Database = {
           extracted_items?: Json | null
           id?: string
           role?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -110,6 +119,7 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -119,6 +129,7 @@ export type Database = {
           status?: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -128,6 +139,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -140,6 +152,7 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -149,6 +162,7 @@ export type Database = {
           status?: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -158,6 +172,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -182,6 +197,7 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -195,6 +211,7 @@ export type Database = {
           status?: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -208,6 +225,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
