@@ -7,12 +7,50 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// UUID v4 regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidPublicUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const hostname = url.hostname;
+    if (
+      hostname === "localhost" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("169.254.") ||
+      hostname.startsWith("172.16.") ||
+      hostname.startsWith("172.17.") ||
+      hostname.startsWith("172.18.") ||
+      hostname.startsWith("172.19.") ||
+      hostname.startsWith("172.2") ||
+      hostname.startsWith("172.3") ||
+      hostname === "0.0.0.0" ||
+      hostname === "[::1]"
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { bookmark_id } = await req.json();
-    if (!bookmark_id) throw new Error("bookmark_id is required");
+    const body = await req.json();
+    const bookmark_id = body?.bookmark_id;
+
+    if (!bookmark_id || typeof bookmark_id !== "string" || !UUID_REGEX.test(bookmark_id)) {
+      return new Response(JSON.stringify({ error: "Invalid bookmark_id: must be a valid UUID" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,6 +69,14 @@ serve(async (req) => {
       });
     }
 
+    // Validate the bookmark URL before fetching
+    if (!isValidPublicUrl(bookmark.url)) {
+      return new Response(JSON.stringify({ error: "Invalid or unsafe URL" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Fetch the URL content
     let pageText = "";
     try {
@@ -38,12 +84,10 @@ serve(async (req) => {
       const isTwitter = urlObj.hostname === "x.com" || urlObj.hostname === "twitter.com" || urlObj.hostname === "www.x.com" || urlObj.hostname === "www.twitter.com";
 
       if (isTwitter) {
-        // Use Twitter's oEmbed API (free, no auth needed) to get tweet text
         const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(bookmark.url)}&omit_script=true`;
         const oembedResp = await fetch(oembedUrl);
         if (oembedResp.ok) {
           const oembed = await oembedResp.json();
-          // Strip HTML from the returned html field to get plain text
           pageText = (oembed.html || "")
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
@@ -51,13 +95,10 @@ serve(async (req) => {
           if (oembed.author_name) {
             pageText = `Tweet by ${oembed.author_name}: ${pageText}`;
           }
-          console.log("Twitter oEmbed success, length:", pageText.length);
         } else {
-          console.log("Twitter oEmbed error:", oembedResp.status);
           pageText = `Twitter/X post at ${bookmark.url}`;
         }
       } else {
-        // Use Firecrawl for non-Twitter URLs
         const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
         if (FIRECRAWL_API_KEY) {
           const scrapeResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -76,13 +117,9 @@ serve(async (req) => {
           if (scrapeResp.ok) {
             const scrapeData = await scrapeResp.json();
             pageText = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 5000);
-            console.log("Firecrawl scraped successfully, length:", pageText.length);
-          } else {
-            console.log("Firecrawl error:", scrapeResp.status, await scrapeResp.text());
           }
         }
 
-        // Fallback to basic fetch
         if (!pageText) {
           const pageResp = await fetch(bookmark.url, {
             headers: { "User-Agent": "Mozilla/5.0 AgentOS/1.0" },
@@ -149,7 +186,7 @@ serve(async (req) => {
     });
 
     if (!aiResp.ok) {
-      console.error("AI error:", aiResp.status, await aiResp.text());
+      console.error("AI error:", aiResp.status);
       return new Response(JSON.stringify({ error: "AI summarization failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -161,7 +198,6 @@ serve(async (req) => {
     if (!toolCall) throw new Error("No tool call in response");
 
     const result = JSON.parse(toolCall.function.arguments);
-    console.log("Summarization result:", JSON.stringify(result));
 
     await supabase.from("bookmarks").update({
       title: result.title,
@@ -174,7 +210,7 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("summarize-bookmark error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

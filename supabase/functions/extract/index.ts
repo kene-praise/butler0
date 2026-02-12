@@ -18,11 +18,32 @@ Guidelines:
 - Priority should be "low", "medium", "high", or "urgent" based on context
 - Dates should be ISO format (YYYY-MM-DD) when mentioned`;
 
+function validateMessages(messages: unknown): { role: string; content: string }[] | null {
+  if (!Array.isArray(messages)) return null;
+  if (messages.length === 0 || messages.length > 50) return null;
+  
+  for (const msg of messages) {
+    if (typeof msg !== "object" || msg === null) return null;
+    if (!["user", "assistant", "system"].includes(msg.role)) return null;
+    if (typeof msg.content !== "string") return null;
+    if (msg.content.length === 0 || msg.content.length > 10000) return null;
+  }
+  return messages as { role: string; content: string }[];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages } = await req.json();
+    const body = await req.json();
+    const messages = validateMessages(body?.messages);
+    if (!messages) {
+      return new Response(
+        JSON.stringify({ error: "Invalid input: messages must be an array of {role, content} objects" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
@@ -96,8 +117,7 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      console.error("AI gateway error:", response.status);
       return new Response(JSON.stringify({ error: "AI extraction failed" }), {
         status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -105,7 +125,6 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("Extraction response:", JSON.stringify(data));
     
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
@@ -120,7 +139,7 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("extract error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
