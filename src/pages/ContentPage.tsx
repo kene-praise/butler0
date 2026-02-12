@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bookmark, Plus, Loader2, ExternalLink, Sparkles } from "lucide-react";
+import { Bookmark, Plus, Loader2, ExternalLink, Sparkles, Send } from "lucide-react";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -149,6 +149,11 @@ export default function ContentPage() {
                       {bm.title || bm.url}
                     </CardTitle>
                     <div className="flex items-center gap-2">
+                      {(bm as any).source === "telegram" && (
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                          <Send className="mr-1 h-3 w-3" /> Telegram
+                        </Badge>
+                      )}
                       {bm.status && (
                         <Badge variant="outline" className={statusColor[bm.status] || ""}>
                           {bm.status}
