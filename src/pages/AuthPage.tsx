@@ -48,7 +48,7 @@ export default function AuthPage() {
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
             <Zap className="h-5 w-5 text-primary-foreground" />
           </div>
-          <CardTitle>AgentOS</CardTitle>
+          <CardTitle>Butler</CardTitle>
           <CardDescription>
             {isSignUp ? "Create an account to get started" : "Sign in to your account"}
           </CardDescription>

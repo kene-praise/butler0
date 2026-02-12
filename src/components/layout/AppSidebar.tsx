@@ -47,7 +47,7 @@ export function AppSidebar() {
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
           <Zap className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="text-base font-semibold text-sidebar-foreground">AgentOS</span>
+        <span className="text-base font-semibold text-sidebar-foreground">Butler</span>
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-2">
