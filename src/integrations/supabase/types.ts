@@ -53,6 +53,8 @@ export type Database = {
           content_summary: string | null
           created_at: string
           id: string
+          source: string
+          source_id: string | null
           status: string
           title: string | null
           updated_at: string
@@ -64,6 +66,8 @@ export type Database = {
           content_summary?: string | null
           created_at?: string
           id?: string
+          source?: string
+          source_id?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -75,6 +79,8 @@ export type Database = {
           content_summary?: string | null
           created_at?: string
           id?: string
+          source?: string
+          source_id?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -243,6 +249,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_settings: {
+        Row: {
+          created_at: string
+          id: string
+          setting_key: string
+          setting_value: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          setting_key: string
+          setting_value: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          setting_key?: string
+          setting_value?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
