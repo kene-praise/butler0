@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import {
   MessageSquare,
   Target,
@@ -10,6 +11,7 @@ import {
   Bell,
   Settings,
   Zap,
+  LogOut,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +25,7 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const { signOut } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -73,8 +76,14 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border px-5 py-4">
-        <p className="text-xs text-muted-foreground">Your AI execution assistant</p>
+      <div className="border-t border-sidebar-border px-3 py-3">
+        <button
+          onClick={signOut}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );
