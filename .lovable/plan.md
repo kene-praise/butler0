@@ -1,84 +1,86 @@
 
+# Telegram Bot Integration for Butler
 
-# AgentOS — Your Proactive AI Execution Assistant
+## How It Works
 
-A clean, minimal AI assistant that turns conversations into structured goals, tasks, and reminders — then proactively nudges you to execute.
+You forward tweets (or any links) to a Telegram bot. Butler automatically picks them up, summarizes them with AI, categorizes them, and deduplicates against existing bookmarks.
 
----
+```text
++------------------+     +-------------------+     +------------------+
+| You on Telegram  | --> | Telegram Webhook  | --> | Butler Backend   |
+| Forward a tweet  |     | (Edge Function)   |     | - Save bookmark  |
++------------------+     +-------------------+     | - AI summarize   |
+                                                    | - Deduplicate    |
+                                                    +------------------+
+```
 
-## Phase 1: AI Chat + Task Extraction Engine
+## Setup (One-Time, ~2 Minutes)
 
-**AI Chat Interface**
-- Clean, minimal chat UI with a full-screen conversational layout
-- Message history with clear user/assistant distinction
-- Streaming responses using Lovable AI (Gemini)
+1. Open Telegram and message **@BotFather**
+2. Send `/newbot`, name it "Butler Bot"
+3. Copy the bot token you receive
+4. Paste it into Butler's Settings page
+5. Butler registers the webhook automatically -- done!
 
-**Automatic Task & Goal Detection**
-- AI analyzes each conversation and extracts goals, tasks, milestones, and deadlines
-- Extracted items appear in a sidebar panel alongside the chat
-- User can confirm, edit, or dismiss extracted items before saving
+After that, just forward any tweet or link to your bot in Telegram. Butler handles the rest.
 
-**Database Setup (Lovable Cloud)**
-- Tables: goals, milestones, tasks, bookmarks, agent_events, chat_messages
-- All linked to a single default user (no auth yet)
+## What Gets Built
 
----
+### 1. Database: Add `source` and `source_id` columns to bookmarks
+- `source` (text, default `'manual'`) -- tracks where the bookmark came from (`manual`, `telegram`)
+- `source_id` (text, nullable) -- stores the original tweet URL or message ID for deduplication
 
-## Phase 2: Goals & Tasks Dashboard
+### 2. Edge Function: `telegram-webhook`
+- Receives incoming messages from Telegram
+- Extracts URLs from the message text (tweets or any link)
+- Checks for duplicates by matching `source_id` (the URL) against existing bookmarks
+- Inserts new bookmarks and triggers AI summarization via the existing `summarize-bookmark` function
+- Returns appropriate response to Telegram
 
-**Goals View**
-- List of all goals with status, deadline, and progress bar
-- Expand a goal to see its milestones and tasks in a tree structure
-- Create/edit goals manually or via chat
+### 3. Edge Function: `telegram-setup`
+- Called from the Settings page when user saves their bot token
+- Stores the token as a user setting
+- Registers the webhook URL with Telegram's API (`setWebhook`)
+- Verifies the connection is working
 
-**Tasks View**
-- Filterable task list (by status, priority, due date, goal)
-- Quick actions: mark complete, snooze, edit, delete
-- Task detail panel with notes and AI suggestions
+### 4. Database: `user_settings` table
+- Stores per-user settings like `telegram_bot_token` and `telegram_chat_id`
+- RLS-protected so each user only sees their own settings
 
----
+### 5. Settings Page Update
+- Add a "Telegram Integration" card with:
+  - Input field for bot token
+  - "Connect" button that triggers webhook registration
+  - Status indicator (connected/disconnected)
+  - Instructions on how to get a bot token
 
-## Phase 3: Agent Loop & Reminders
+### 6. Content Page Update
+- Show source badge on bookmarks (manual vs telegram)
+- Visual indicator for auto-imported items
 
-**Proactive Agent System**
-- Scheduled edge function (cron) that runs periodically
-- Checks for overdue tasks, upcoming deadlines, and inactivity
-- Generates proactive nudges and suggestions using AI
-- Stores agent events in the database
+## Deduplication Logic
 
-**Notifications Panel**
-- In-app notification center showing agent-generated nudges
-- Types: deadline reminders, suggested next actions, daily planning prompts, check-ins
-- Unread badge indicator
+When a new message arrives from Telegram:
+1. Extract all URLs from the message
+2. For each URL, check if a bookmark with that `source_id` already exists for the user
+3. Skip duplicates, insert only new ones
+4. This ensures re-forwarding the same tweet does nothing
 
----
+## Future: Automated 6-Hour Sync
 
-## Phase 4: Content Queue (Bookmarks)
+The Telegram approach is already real-time (webhook fires instantly when you forward a message), so there's no need for polling. Every forwarded tweet arrives in Butler within seconds. The 6-hour cron job can later be used for re-summarizing or re-categorizing existing bookmarks if needed.
 
-**Manual URL Import**
-- Paste any URL into a "Content Queue" page
-- AI fetches/summarizes the content and categorizes it (read later, research, implement, watch)
-- One-click "Create Task" from any bookmark
+## Technical Details
 
-**Content Queue View**
-- Filterable list of saved content with AI-generated summaries and categories
-- Status tracking (unread, read, actioned)
+### Security
+- The `telegram-webhook` endpoint must be public (no JWT) since Telegram calls it, but it will validate requests using a secret token in the webhook URL path
+- User association: the bot token is linked to a specific user, so incoming messages are routed to the correct account
+- The `telegram-setup` endpoint requires authentication (JWT)
 
----
-
-## Phase 5: Memory & Intelligence
-
-**AI Memory System**
-- Chat history stored and used as context for future conversations
-- AI remembers user goals, preferences, and behavioral patterns
-- Contextual suggestions improve over time
-
----
-
-## Design Direction
-
-- Clean & minimal aesthetic inspired by Notion/Linear
-- Lots of whitespace, simple typography
-- Sidebar navigation with pages: Chat, Goals, Tasks, Content Queue, Notifications, Settings
-- Light mode default, consistent neutral color palette
-
+### Files to Create/Modify
+- **New migration**: Add `source`, `source_id` to `bookmarks`; create `user_settings` table
+- **New**: `supabase/functions/telegram-webhook/index.ts`
+- **New**: `supabase/functions/telegram-setup/index.ts`
+- **Modified**: `supabase/config.toml` (add function entries)
+- **Modified**: `src/pages/SettingsPage.tsx` (Telegram config UI)
+- **Modified**: `src/pages/ContentPage.tsx` (show source badges)
