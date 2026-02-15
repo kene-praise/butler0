@@ -48,11 +48,8 @@ serve(async (req) => {
         });
       }
 
-      // Store the bot token
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
-
-      await adminSupabase.from("user_settings").upsert({
+      // Store the bot token (use user-scoped client so set_user_id trigger works)
+      await supabase.from("user_settings").upsert({
         user_id: userId,
         setting_key: "telegram_bot_token",
         setting_value: bot_token,
@@ -79,7 +76,7 @@ serve(async (req) => {
       }
 
       // Store connection status
-      await adminSupabase.from("user_settings").upsert({
+      await supabase.from("user_settings").upsert({
         user_id: userId,
         setting_key: "telegram_connected",
         setting_value: "true",
@@ -108,10 +105,7 @@ serve(async (req) => {
       }
 
       // Remove settings
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
-
-      await adminSupabase.from("user_settings").delete()
+      await supabase.from("user_settings").delete()
         .eq("user_id", userId)
         .in("setting_key", ["telegram_bot_token", "telegram_connected", "telegram_chat_id"]);
 
