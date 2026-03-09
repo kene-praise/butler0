@@ -117,7 +117,7 @@ serve(async (req) => {
       // Remove settings
       await supabase.from("user_settings").delete()
         .eq("user_id", userId)
-        .in("setting_key", ["telegram_bot_token", "telegram_connected", "telegram_chat_id"]);
+        .in("setting_key", ["telegram_bot_token", "telegram_connected", "telegram_chat_id", "telegram_webhook_secret"]);
 
       return new Response(
         JSON.stringify({ success: true, message: "Telegram bot disconnected" }),

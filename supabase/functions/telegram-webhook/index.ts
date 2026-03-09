@@ -7,10 +7,24 @@ serve(async (req) => {
   }
 
   try {
+    // Validate the request comes from Telegram using the secret token header
+    const secretHeader = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
+    if (!secretHeader) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const body = await req.json();
     const message = body?.message;
-    if (!message?.text) {
+    if (!message?.text || !message?.chat?.id) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    // Validate message timestamp is recent (prevent replay attacks, 5 min window)
+    if (message.date) {
+      const messageAge = Date.now() / 1000 - message.date;
+      if (messageAge > 300) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
     }
 
     // Extract URLs from message
