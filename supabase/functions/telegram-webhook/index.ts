@@ -38,6 +38,18 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+    // Validate the secret token matches a registered webhook secret
+    const { data: secretMatch } = await supabase
+      .from("user_settings")
+      .select("user_id")
+      .eq("setting_key", "telegram_webhook_secret")
+      .eq("setting_value", secretHeader)
+      .single();
+
+    if (!secretMatch) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     // Find the user associated with this bot by matching the chat_id or bot token
     // We look up which user has this telegram_chat_id
     const chatId = String(message.chat.id);
