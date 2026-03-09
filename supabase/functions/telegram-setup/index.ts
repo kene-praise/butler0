@@ -55,14 +55,24 @@ serve(async (req) => {
         setting_value: bot_token,
       }, { onConflict: "user_id,setting_key" });
 
-      // Register webhook with Telegram
+      // Generate a webhook secret token for validation
+      const secretToken = crypto.randomUUID().replace(/-/g, "");
+
+      // Store the webhook secret
+      await supabase.from("user_settings").upsert({
+        user_id: userId,
+        setting_key: "telegram_webhook_secret",
+        setting_value: secretToken,
+      }, { onConflict: "user_id,setting_key" });
+
+      // Register webhook with Telegram, including secret_token for verification
       const webhookUrl = `${supabaseUrl}/functions/v1/telegram-webhook`;
       const telegramResp = await fetch(
         `https://api.telegram.org/bot${bot_token}/setWebhook`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: webhookUrl }),
+          body: JSON.stringify({ url: webhookUrl, secret_token: secretToken }),
         }
       );
 
