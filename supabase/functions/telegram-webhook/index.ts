@@ -7,10 +7,24 @@ serve(async (req) => {
   }
 
   try {
+    // Validate the request comes from Telegram using the secret token header
+    const secretHeader = req.headers.get("X-Telegram-Bot-Api-Secret-Token");
+    if (!secretHeader) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
     const body = await req.json();
     const message = body?.message;
-    if (!message?.text) {
+    if (!message?.text || !message?.chat?.id) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    // Validate message timestamp is recent (prevent replay attacks, 5 min window)
+    if (message.date) {
+      const messageAge = Date.now() / 1000 - message.date;
+      if (messageAge > 300) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
     }
 
     // Extract URLs from message
@@ -23,6 +37,18 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Validate the secret token matches a registered webhook secret
+    const { data: secretMatch } = await supabase
+      .from("user_settings")
+      .select("user_id")
+      .eq("setting_key", "telegram_webhook_secret")
+      .eq("setting_value", secretHeader)
+      .single();
+
+    if (!secretMatch) {
+      return new Response("Unauthorized", { status: 401 });
+    }
 
     // Find the user associated with this bot by matching the chat_id or bot token
     // We look up which user has this telegram_chat_id
